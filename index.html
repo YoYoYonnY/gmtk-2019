@@ -1,0 +1,1394 @@
+<html>
+<head>
+<style>
+#upgrademenu, #hints {
+    background: rgba(0, 0, 0, 0.9);
+    font-family: "Lucida Console", Monaco, monospace;
+    font-size: 12;
+    color: #ffffff;
+    position: fixed;
+    border: 1px solid #ffffff;
+}
+#upgrademenu h1, #hints h1 {
+    text-align: center;
+    padding-bottom: 0.67em;
+    border-bottom: 1px solid #ffffff;
+}
+#upgrademenu #info {
+    width: 100%;
+    font-size: 18px;
+    text-align: center;
+    padding-bottom: 0.67em;
+    border-bottom: 1px dashed #ffffff;
+}
+#hints #hinttext {
+    font-size: 12px;
+    text-align: left;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+#hints #hinttext kbd {
+    border: 1px solid #ffffff;
+    padding: 1px 4px 1px 4px;
+}
+#upgrademenu #description {
+    font-size: 12px;
+    text-align: center;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+#upgrademenu #options div {
+    display: flex;
+}
+#upgrademenu #options button {
+    flex: 1;
+    color: inherit;
+    outline: none;
+    background-color: #000000;
+    border: 1px solid #00ff33;
+    height: 50px;
+    margin: 2px;
+}
+#upgrademenu #options button:hover {
+    background-color: #003311;
+}
+#upgrademenu #options button[disabled]:hover {
+    background-color: #000000;
+}
+#upgrademenu #options button[data-bought], #upgrademenu #options button[data-bought]:hover {
+    background-color: #00ff33;
+}
+#upgrademenu #stats {
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-top: 1px dashed #ffffff;
+}
+</style>
+<script>
+'use strict';
+
+var canvas = document.createElement('canvas');
+var ctx = canvas.getContext('2d');
+
+function cursor(cursor) {
+    canvas.style.cursor = cursor;
+};
+function fullscreen(b) {
+    if (b == null) {
+        b = !(document.fullscreenElement);
+    }
+    if (b) {
+        document.requestFullscreen();
+        redraw();
+    } else {
+        document.exitFullscreen();
+    }
+};
+function clock() {
+    return new Date().getTime();
+};
+function get(obj, key) {
+    var m;
+    while (m = key.match(/(.+)\./)) {
+        obj = obj[m[1]];
+        key = key.substr(m[0].length);
+    }
+    return obj[key];
+};
+function set(obj, key, value) {
+    var m;
+    while (m = key.match(/(.+)\./)) {
+        obj = obj[m[1]];
+        key = key.substr(m[0].length);
+    }
+    obj[key] = value;
+};
+function mod(a, b) {
+    return ((a % b) + b) % b;
+};
+function rad2deg(radians) { // Radians to degrees
+    return radians * 180.0 / Math.PI;
+};
+function rad2perc(radians) { // Radians to percent
+    return radians / Math.PI / 2;
+};
+function deg2rad(degrees) { // Degrees to radians
+    return degrees / 180.0 * Math.PI;
+};
+function deg2perc(degrees) { // Degrees to percent
+    return degrees / 360.0;
+};
+function perc2rad(percentage) { // Percent to radians
+    return percentage * Math.PI / 2;
+};
+function perc2deg(percentage) { // Percent to degrees
+    return percentage * 360.0;
+};
+function rad(rad) { return rad; }
+var deg = deg2rad;
+var perc = perc2rad;
+function clamp(v, min, max) {
+    if (v <= min) return min;
+    if (v >= max) return max;
+    return v;
+};
+function rgb(r, g, b) {
+    return '#'
+         + Math.floor(clamp(r, 0, 255)).toString(16).padStart(2, '0')
+         + Math.floor(clamp(g, 0, 255)).toString(16).padStart(2, '0')
+         + Math.floor(clamp(b, 0, 255)).toString(16).padStart(2, '0');
+};
+function hsl(h, s, l){
+    h = mod(h, 1.0);
+    s = clamp(s, 0.0, 1.0);
+    l = clamp(l, 0.0, 1.0);
+
+    function hue2rgb(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+    };
+    var r, g, b;
+    if (s == 0) {
+        r = l;
+        g = l;
+        b = l; // achromatic
+    } else {
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+
+    return rgb(r * 255, g * 255, b * 255);
+};
+function unpackRGB(rgb) {
+    if (rgb[0] == '#') return [ parseInt(rgb.substr(1, 2), 16), parseInt(rgb.substr(3, 2), 16), parseInt(rgb.substr(5, 2), 16) ];
+    var match = rgb.match(/(\d+),(\d+),(\d+)/);
+    return [ parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16) ];
+}
+function rgb2hsl(rgb) {
+    var rgb = unpackRGB(rgb);
+    var R = rgb[0] / 255, G = rgb[1] / 255, B = rg[2] / 255;
+    var CMax = Math.max(R, G, B);
+    var CMin = Math.max(R, G, B);
+    var CDelta = CMax - CMin;
+    var H;
+    if (CMax == CMin) H = 0;
+    if (CMax == R)    H = deg(60.0) * (((G - B) / CDelta) % 6);
+    if (CMax == G)    H = deg(60.0) * (((B - R) / CDelta) + 2);
+    if (CMax == B)    H = deg(60.0) * (((R - G) / CDelta) + 4);
+    var L = (CMax + CMin) / 2;
+    var S = CDelta == 0 ? 0 : CDelta / (1 - Math.abs(2 * L - 1));
+    return [ H, S, L ];
+};
+function rgba(r, g, b, a) {
+    return 'rgba('
+         + Math.floor(clamp(r, 0, 255)).toString() + ','
+         + Math.floor(clamp(g, 0, 255)).toString() + ','
+         + Math.floor(clamp(b, 0, 255)).toString() + ','
+         + clamp(a, 0, 1).toString()
+         + ')';
+};
+
+var MOD_CTRL  = 0x1;
+var MOD_SHIFT = 0x2;
+var MOD_META  = 0x4;
+var MOD_ALT   = 0x8;
+var mouse = { x: 0, y: 0
+            , lastx: 0, lasty: 0
+            , dx: 0, dy: 0
+            , buttons: { pressed: 0 , held: 0 , released: 0 }
+            , scroll: { x: 0, y: 0 } };
+var keys  = { pressed: {}
+            , held: {}
+            , released: {}
+            , mods: 0 };
+
+var app = (function() {
+    var app = {};
+    app.loaded = false;     // True if the app is currently loaded
+    app.hasFocus = true;    // If we have mouse/keyboard focus
+    app.frame = 0;          // The current frame being drawn
+    app.currentTime = null; // The current time
+    app.dt = null;          // Time since the last update, null if not currently processing one
+    app.maxdt = 20;         // Max 20ms per update
+    app.lastTime = clock(); // When we drew the last frame
+    app.children = [];      // The elements we should remove when unloading
+    app.body = document.createElement('div');
+    app.error = function(e) { // Unload the app and display an error message
+        app.unload();
+        var errorRoot = document.createElement('pre');
+        var errorText = document.createTextNode('Uncaught ' + (e instanceof Error ? e.stack : e.toString()));
+        errorRoot.style.margin = "25px 10px 0px 10px";
+        errorRoot.style.border = "1px dashed black";
+        errorRoot.style.padding = "5px";
+        errorRoot.style.fontSize = "12px";
+        errorRoot.style.color = 'red';
+        errorRoot.appendChild(errorText);
+        document.body.appendChild(errorRoot);
+        throw e;
+    };
+    app.load = function() { // Load the app (install event listeners)
+        var style = document.createElement('style');
+        document.head.appendChild(style);
+        var sheet = style.sheet;
+        sheet.insertRule('html, head, body { margin: 0px; padding: 0px; font-size: 0px; }', 0); // Allow child elements to fill the whole page, and avoid weird rendering errors on elements containing no text when font size is non-zero.
+        app.children.push(style);
+
+        if ( document.readyState == "interactive" // document has been parsed, but sub-resources (like images) still have to load
+          || document.readyState == "complete"    // the entire page has finished loading
+          || document.readyState == "loaded"      // deprecated alias of "complete"
+        //|| document.readyState == "loading"     // the page is still being parsed
+           ) {
+            onload();
+        }
+        addEventListener("load", onload);
+        addEventListener("focus", onfocus);
+        addEventListener("blur", onfocus);
+        addEventListener("resize", onresize);
+        addEventListener("keydown", onkey);
+        addEventListener("keyup", onkey);
+        addEventListener("mousedown", onmouse);
+        addEventListener("mouseup", onmouse);
+        addEventListener("mousemove", onmouse);
+        addEventListener("mousewheel", onmouse, { passive: false });
+        addEventListener("contextmenu", onmouse);
+        app.loaded = true;
+    };
+    app.unload = function() { // Unload the app (uninstall event listeners)
+        if (!app.loaded) return;
+        app.loaded = false;
+        for (var i=0, len = app.children.length; i < len; i++) {
+            var child = app.children[i];
+            if (child.parentElement) child.parentElement.removeChild(child);
+        }
+        document.body.removeChild(app.body);
+        removeEventListener("load", onload);
+        removeEventListener("focus", onfocus);
+        removeEventListener("blur", onfocus);
+        removeEventListener("resize", onresize);
+        removeEventListener("keydown", onkey);
+        removeEventListener("keyup", onkey);
+        removeEventListener("mousedown", onmouse);
+        removeEventListener("mouseup", onmouse);
+        removeEventListener("mousemove", onmouse);
+        removeEventListener("mousewheel", onmouse, { passive: false });
+        removeEventListener("contextmenu", onmouse);
+    };
+    return app;
+
+    function onupdate(dt) {
+        if (app.onupdate != null) {
+            try {
+                while (dt >= app.maxdt) {
+                    app.dt = app.maxdt;
+                    app.onupdate(app.maxdt);
+                    app.dt = null;
+                    dt -= app.maxdt;
+                }
+                if (dt > 0) {
+                    app.dt = dt;
+                    app.onupdate(dt);
+                    app.dt = null;
+                }
+            } catch (e) {
+                app.unload();
+                app.error(e);
+            }
+        }
+        keys.pressed = {};
+        keys.released = {};
+        mouse.buttons.pressed = 0;
+        mouse.buttons.released = 0;
+        mouse.dx = 0;
+        mouse.dy = 0;
+        mouse.lastx = mouse.x;
+        mouse.lasty = mouse.y;
+        mouse.scroll.x = 0;
+        mouse.scroll.y = 0;
+    };
+    function onredraw() {
+        app.currentTime = clock();
+        let dt = app.currentTime - app.lastTime;
+        app.lastTime = app.currentTime;
+        onupdate(dt);
+        if (app.onredraw != null) {
+            try {
+                app.onredraw(app.frame++);
+            } catch (e) {
+                app.unload();
+                app.error(e);
+            }
+        }
+        requestAnimationFrame(onredraw);
+    };
+    function onresize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        if (app.onresize) app.onresize();
+        onredraw();
+    };
+    function onload() {
+        document.body.appendChild(app.body);
+        app.body.appendChild(canvas);
+        if (app.onload) app.onload();
+        onresize();
+    };
+    function onfocus(e) {
+        app.hasFocus = e.type == "focus";
+        if (app.onfocus) app.onfocus(e);
+    }
+    function onmouse(e) {
+        var button = 1 << e.button;
+        keys.mods = (e.ctrlKey  ? MOD_CTRL  : 0)
+                  | (e.shiftKey ? MOD_SHIFT : 0)
+                  | (e.metaKey  ? MOD_META  : 0)
+                  | (e.altKey   ? MOD_ALT   : 0);
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+        mouse.dx = mouse.x - mouse.lastx;
+        mouse.dy = mouse.y - mouse.lasty;
+        mouse.buttons.held = e.buttons;
+        if (e.type == "mousedown") {
+            mouse.buttons.pressed |= button;
+            mouse.buttons.released &= ~button;
+        } else if (e.type == "mouseup") {
+            mouse.buttons.pressed &= ~button;
+            mouse.buttons.released |= button;
+        } else if (e.type == "mousewheel") {
+            mouse.scroll.x += e.deltaX;
+            mouse.scroll.y += e.deltaY;
+        }
+        if (app.onmouse) app.onmouse(e);
+        if (e.target == canvas) {
+            document.body.contentEditable = true;
+            document.body.focus();
+            document.body.removeAttribute("contenteditable");
+            e.preventDefault();
+            return false;
+        }
+    };
+    function onkey(e) {
+        keys.mods = (e.ctrlKey  ? MOD_CTRL  : 0)
+                  | (e.shiftKey ? MOD_SHIFT : 0)
+                  | (e.metaKey  ? MOD_META  : 0)
+                  | (e.altKey   ? MOD_ALT   : 0);
+        if (e.type == "keydown") {
+            if (e.code == "F5") {
+                location.reload();
+                return true;
+            } else if (e.code == "F11") {
+                fullscreen();
+            }
+        }
+        if (!e.repeat) {
+            if (e.type == "keydown") {
+                keys.pressed[e.code] = true;
+                keys.held[e.code] = true;
+            } else if (e.type == "keyup") {
+                keys.released[e.code] = true;
+                delete keys.held[e.code];
+            }
+        }
+        if (app.onkey) return app.onkey(e);
+        if (e.target == document.body || e.target == canvas) {
+            e.preventDefault();
+            return false;
+        }
+    };
+}).call(window);
+
+function createMap(w, h, data) {
+    if (data.length != w * h) throw new TypeError('map data invalid');
+    let map = [];
+    map.w = w;
+    map.h = h;
+    for (let y=0; y < h; y++) {
+        map[y] = [];
+        for (let x=0; x < w; x++) {
+            map[y][x] = data[h*y+x];
+        }
+    }
+    map.distance = [];
+    for (let y=0; y < h; y++) {
+        map.distance[y] = Array(w).fill(0);
+    }
+    let start = null;
+    let end = null;
+    for (let x=0; x < w; x++) {
+        if (map[0][x] == 'v')   start = { x: x, y: 0 };
+        if (map[0][x] == '^')   end   = { x: x, y: 0 };
+        if (map[h-1][x] == '^') start = { x: x, y: h-1 };
+        if (map[h-1][x] == '^') end   = { x: x, y: h-1 };
+    }
+    for (let y=0; y < h; y++) {
+        if (map[y][0] == '>')   start = { x: 0, y: y };
+        if (map[y][0] == '<')   end   = { x: 0, y: y };
+        if (map[y][w-1] == '<') start = { x: w-1, y: y };
+        if (map[y][w-1] == '>') end   = { x: w-1, y: y };
+    }
+    if (start == null || end == null) throw new TypeError('map data has no start/end');
+    let lastDistance = 0;
+    function step() {
+        let x = start.x;
+        let y = start.y;
+        if      (map[y][x] == '^') start.y -= 1;
+        else if (map[y][x] == 'v') start.y += 1;
+        else if (map[y][x] == '>') start.x += 1;
+        else if (map[y][x] == '<') start.x -= 1;
+        else if (map[y][x] != '.') throw new TypeError('map data invalid (got invalid character "' + map[y][x] + '")');
+    }
+    while (start.x != end.x || start.y != end.y) {
+        lastDistance = map.distance[start.y][start.x] = lastDistance + 1;
+        step();
+    }
+    return map;
+};
+
+let map
+    = createMap(
+        16, 16
+    , '..v..........^..'
+    + '..v..........^<.'
+    + '..>>>>>>>>v...^.'
+    + '..........>v..^.'
+    + '...........>v.^.'
+    + '...v<<.v<<..v.^.'
+    + '.v<<.^<<.^<<<.^.'
+    + '.v............^.'
+    + '.>>v.>>v.>>v..^.'
+    + '...>>^.>>^.v..^.'
+    + '...........>v.^.'
+    + '.v<<<<<.....v.^.'
+    + '.v....^<<<<<<.^.'
+    + '.v............^.'
+    + '.>>>>>>>>>>>>>^.'
+    + '................'
+    );
+
+let mode = 'select'; // "select", "place"
+let selx = null, sely = null;
+let seltype = 'burst';
+let lastUnit = 0;
+let money = 500;
+let singletowermode = true; // feel free to disable
+let killbonus = 10;
+let sellbackpercentage = 0.80;
+let upgradesellbackpercentage = 0.50;
+
+let speed = 1;
+let paused = false;
+let gameover = false;
+
+let lasers = [];
+let batchedtexts = [];
+let f2b = null; // List of enemies, but sorted from front to back
+let enemies = [];
+let towers = [];
+
+function spendMoney(balance) {
+    if (balance > money) return false;
+    batchedtexts.push({ x: 32,
+                        y: 32,
+                        text: '-$' + balance,
+                        time: 0,
+                        maxtime: 1000 });
+    money -= balance;
+    money = Math.ceil(money);
+    return true;
+};
+function addMoney(balance) {
+    balance = Math.ceil(balance);
+    batchedtexts.push({ x: 32,
+                        y: 32,
+                        text: '$' + balance,
+                        time: 0,
+                        maxtime: 1000 });
+    money += balance;
+};
+
+function repeat(enemytype, times, delay) {
+    return { times: times, enemytype: enemytype, elapsed: 0, delay: delay };
+};
+function wait(delay) {
+    return [{ enemytype: null, elapsed: 0, delay: delay }];
+};
+
+let wavenum = 0;
+let wavedone = true;
+
+let waves = [
+    [repeat('normal', 8, 2000)].flat(), // every tower should be able to solo level 1, although it should look marginally intimidating
+    [repeat('normal', 8, 2000), repeat('double', 1, 2000), repeat('normal', 8, 2000)].flat(), // introduce different enemy
+    [repeat('fast', 8, 1000)].flat(), // introduce harder enemy in isolation
+    [repeat('normal', 8, 500)].flat(), // show that faster waves are more difficult
+    [repeat('fast', 5, 500), wait(1000), repeat('normal', 5, 500)].flat(), // mix enemies and teach about enemy deploy (down)time if player doesnt understand it already
+    [repeat('normal', 3, 500), repeat('fast', 3, 500), repeat('normal', 3, 500), repeat('fast', 3, 500)].flat(), // ramp up the difficulty.
+    // every tower besides frost can solo until this unupgraded with the right placement
+    // frost needs upgrade to defeat blue enemy
+
+    [repeat('thicc', 1, 500)].flat(), // mess with anyone trying a low dps strat. bolt players can actually beat this wave if they spam next wave, since bolt is much more effective the more often it has an enemy in sight (hint hint)
+    [repeat('fast', 30, 100)].flat(), // punish anyone looking to solo with burst or pulse both have to upgrade at this point
+    [repeat('sanec', 2, 2000)].flat(), // players who beat the last round can almost certainly beat this one, so we can basically introduces a new enemy for free
+    [repeat('double', 10, 500)].flat(), // doubles are actually surprisingly strong. 250HP on a faster enemy is quite hard to beat without good upgrades.
+    [repeat('thicc', 4, 750)].flat(),
+    [repeat('double', 25, 100)].flat(),
+    [repeat('thicc', 10, 250)].flat(),
+    [repeat('double', 30, 50)].flat(),
+    [repeat('thicc', 20, 100)].flat(),
+    [repeat('double', 50, 10)].flat(),
+    [repeat('thicc', 50, 10)].flat(),
+    [repeat('stronk', 6, 1000)].flat(),
+    [repeat('thicc', 40, 10), repeat('stronk', 4, 50), repeat('thicc', 40, 10)].flat(),
+    [repeat('double', 150, 10)].flat(),
+    [repeat('stronk', 50, 10)].flat(),
+    [repeat('normal', 50, 10), repeat('fast', 50, 10), repeat('double', 50, 10), repeat('thicc', 50, 10), repeat('stronk', 50, 10)].flat(),
+    [repeat('stronk', 150, 10)].flat(),
+    [repeat('sanec', 100, 10)].flat(),
+    [repeat('double', 300, 10), repeat('sanec', 400, 10), repeat('double', 300, 10)].flat(),
+    [repeat('stronk', 1000, 10)].flat(),
+];
+
+function Enemy(type, x=2, y=0, offx=0, offy=-15) {
+    this.type = type;
+    this.x = x;
+    this.y = y;
+    this.offx = offx;
+    this.offy = offy;
+    this.maxhealth = 125;
+    if (type == 'fast') this.maxhealth = 75;
+    if (type == 'sanec') this.maxhealth = 150;
+    if (type == 'thicc') this.maxhealth = 400;
+    if (type == 'stronk') this.maxhealth = 800;
+    this.health = this.maxhealth;
+    this.basespeed = 1;
+    if (type == 'fast') this.basespeed = 2;
+    if (type == 'sanec') this.basespeed = 4;
+    if (type == 'thicc') this.basespeed = 0.5;
+    if (type == 'stronk') this.basespeed = 0.35;
+    this.effects = [];
+};
+Enemy.prototype.giveEffect = function(effect, options) {
+    let index = this.effects.findIndex(x => x.type == effect)
+    if (index != -1) this.effects.splice(index, 1);
+    if (effect == 'freeze') {
+        if (this.type == 'stronk') return this;
+        this.effects.push({
+                type: 'freeze',
+                color: '#00ddff',
+                time: 0,
+                maxtime: options.duration || 10000,
+                damagetime: 0,
+                maxdamagetime: options.damagedelay || 500,
+                damage: options.damage || 2,
+                slowdown: options.slowdown || 0.5
+            });
+    } else if (effect == 'stun') {
+        this.effects.push({
+                type: 'stun',
+                color: null,
+                time: 0,
+                maxtime: (arguments[1] || 0)
+            });
+    }
+    return this;
+};
+Enemy.prototype.hasEffect = function(effect) {
+    return this.effects.find(x => x.type == effect)
+};
+Enemy.prototype.spawnChild = function(child) {
+    for (let effect of this.effects) {
+        child.effects.push(Object.assign({}, effect));
+    }
+    enemies.push(child);
+};
+Enemy.prototype.die = function() {
+    addMoney(killbonus);
+    if (this.type == 'double') {
+        this.spawnChild(new Enemy('normal', this.x, this.y, this.offx, this.offy));
+    }
+    if (this.type == 'sanec') {
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 0));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 250));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 500));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 750));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 1000));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 1250));
+    }
+    if (this.type == 'thicc') {
+        this.spawnChild(new Enemy('double', this.x, this.y, this.offx, this.offy).giveEffect('stun', 0));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 250));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 500));
+        this.spawnChild(new Enemy('fast', this.x, this.y, this.offx, this.offy).giveEffect('stun', 750));
+    }
+    if (this.type == 'stronk') {
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 0));
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 250));
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 500));
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 750));
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 1000));
+        this.spawnChild(new Enemy('thicc', this.x, this.y, this.offx, this.offy).giveEffect('stun', 1250));
+    }
+    return this;
+};
+Enemy.prototype.died = function() {
+    return this.health <= 0;
+};
+Enemy.prototype.damage = function(damage) {
+    this.health -= damage;
+    batchedtexts.push({ x: this.x*32+this.offx+16,
+                        y: this.y*32+this.offy+16,
+                        text: damage,
+                        time: 0,
+                        maxtime: 1000 });
+    return this;
+};
+Enemy.prototype.speed = function() {
+    let effect = null;
+    if (effect = this.hasEffect('stun')) return 0;
+    if (effect = this.hasEffect('freeze')) return this.basespeed * effect.slowdown;
+    return this.basespeed;
+};
+Enemy.prototype.distance = function() {
+    return map.distance[this.y][this.x] - Math.abs(this.offx) / 32 - Math.abs(this.offy) / 32;
+};
+function EnemyColor(type) {
+    if (type == 'normal') return '#ff0000';
+    if (type == 'fast') return '#ffff00';
+    if (type == 'double') return '#2040ff';
+    if (type == 'thicc') return '#20ff10';
+    if (type == 'stronk') return '#ee2080';
+    if (type == 'sanec') return '#ff8000';
+    return null;
+}
+function Tower(type, x, y) {
+    this.type = type; // "burst", "pulse", "bolt", "frost"
+    this.x = x;
+    this.y = y;
+
+    this.radius = 3.5;
+    this.maxdamage = 1000;
+    this.minseentime = null;
+    this.maxcooldown = 250;
+    this.perenemycooldown = null;
+
+    this.price = 300;
+    this.description = 'This tower has no description';
+    this.upgrades = [];
+
+    if (type == 'burst') {
+        this.radius = 3.5;
+        this.damage = 20;
+        this.maxcooldown = 225;
+
+        this.price = 300;
+        this.description = 'The Burst tower fires lasers in quick succession, allowing it to deal lots of damage against slow enemies';
+        this.upgrades = [
+            [ { price: 200, name: '+5dmg',  cb: tower => tower.damage += 5 } // 25dmg
+            , { price: 400, name: '+7dmg',  cb: tower => tower.damage += 7 } // 32dmg
+            , { price: 600, name: '+10dmg', cb: tower => tower.damage += 10 } // 42dmg
+            , { price: 800, name: '+13dmg', cb: tower => tower.damage += 13 } ], // 55dmg
+            [ { price: 200, name: '+25% firerate', cb: tower => tower.maxcooldown *= 0.75 }
+            , { price: 400, name: '+30% firerate', cb: tower => tower.maxcooldown *= 0.7 }
+            , { price: 600, name: '+35% firerate', cb: tower => tower.maxcooldown *= 0.65 }
+            , { price: 800, name: '+40% firerate', cb: tower => tower.maxcooldown *= 0.6 } ],
+            [ { price: 200, name: '+1 range', cb: tower => tower.radius += 1 }
+            , { price: 400, name: '+1 range', cb: tower => tower.radius += 1 }
+            , { price: 600, name: '+1 range', cb: tower => tower.radius += 1 }
+            , { price: 800, name: '+1 range', cb: tower => tower.radius += 1 } ]
+        ];
+    }
+    if (type == 'pulse') {
+        this.radius = 3;
+        this.damage = 80;
+        this.minseentime = 500;
+        this.maxcooldown = 4500;
+        this.perenemycooldown = 500;
+
+        this.price = 450;
+        this.description = 'The Pulse tower fires slow but powerful pulses of lasers, which can hit multiple enemies';
+        this.upgrades = [
+            [ { price: 200, name: '+20dmg', cb: tower => tower.damage += 20 } // 100dmg
+            , { price: 400, name: '+25dmg', cb: tower => tower.damage += 25 } // 125dmg
+            , { price: 600, name: '+30dmg', cb: tower => tower.damage += 30 } // 155dmg
+            , { price: 800, name: '+35dmg', cb: tower => tower.damage += 35 } ], // 190dmg
+            [ { price: 200, name: '-10% per laser cooldown', cb: tower => tower.perenemycooldown *= 0.9 }
+            , { price: 400, name: '-20% per laser cooldown', cb: tower => tower.perenemycooldown *= 0.8 }
+            , { price: 600, name: '-30% per laser cooldown', cb: tower => tower.perenemycooldown *= 0.7 }
+            , { price: 800, name: '-40% per laser cooldown', cb: tower => tower.perenemycooldown *= 0.6 } ],
+            [ { price: 200, name: '-15% max cooldown', cb: tower => tower.maxcooldown *= 0.85 }
+            , { price: 400, name: '-15% max cooldown', cb: tower => tower.maxcooldown *= 0.85 }
+            , { price: 600, name: '-15% max cooldown', cb: tower => tower.maxcooldown *= 0.85 }
+            , { price: 800, name: '-15% max cooldown', cb: tower => tower.maxcooldown *= 0.85 } ]
+        ];
+    }
+    if (type == 'bolt') {
+        this.radius = 1.5;
+        this.damage = 50;
+        this.maxdamage = 250;
+        this.maxcooldown = 3000;
+
+        this.price = 500;
+        this.description = 'The Bolt tower fires a single bolt that deals damage to all enemies in proximity (up to ' + this.maxdamage + 'dmg)';
+        this.upgrades = [
+            [ { price: 200, name: '+5dmg',  cb: tower => tower.damage += 5 } // 55dmg
+            , { price: 400, name: '+10dmg', cb: tower => tower.damage += 10 } // 65dmg
+            , { price: 600, name: '+15dmg', cb: tower => tower.damage += 15 } // 80dmg
+            , { price: 800, name: '+20dmg', cb: tower => tower.damage += 20 } ], // 100dmg
+            [ { price: 200, name: '+10% firerate', cb: tower => tower.maxcooldown *= 0.9 }
+            , { price: 400, name: '+20% firerate', cb: tower => tower.maxcooldown *= 0.8 }
+            , { price: 600, name: '+30% firerate', cb: tower => tower.maxcooldown *= 0.7 }
+            , { price: 800, name: '+40% firerate', cb: tower => tower.maxcooldown *= 0.6 } ],
+            [ { price: 200, name: '+1 range',        cb: tower => tower.radius += 1 }
+            , { price: 400, name: '+100 max damage', cb: tower => tower.maxdamage += 100 } // 350 dmg
+            , { price: 600, name: '+250 max damage', cb: tower => tower.maxdamage += 250 } // 600 dmg
+            , { price: 800, name: '+300 max damage', cb: tower => tower.maxdamage += 300 } ] // 900 dmg
+        ];
+    }
+    if (type == 'frost') {
+        this.radius = 2;
+        this.damage = 1;
+        this.maxcooldown = 500;
+
+        this.freezedamage = 2;
+        this.freezetime = 10000;
+        this.freezeslowdown = 0.5;
+
+        this.price = 350;
+        this.description = 'The Frost tower applies a frost effect to enemies which slows them down and deals damage over time'
+        this.upgrades = [
+            [ { price: 200, name: '+1dmg/freeze tick', cb: tower => tower.freezedamage += 1 } // 3dmg
+            , { price: 400, name: '+2dmg/freeze tick', cb: tower => tower.freezedamage += 2 } // 5dmg
+            , { price: 600, name: '+4dmg/freeze tick', cb: tower => tower.freezedamage += 4 }  // 8dmg
+            , { price: 800, name: '+6dmg/freeze tick', cb: tower => tower.freezedamage += 6 } ],
+            [ { price: 200, name: '+5s freeze',  cb: tower => tower.freezeduration += 5000 } // 15s
+            , { price: 400, name: '+10s freeze', cb: tower => tower.freezeduration += 10000 } // 25s
+            , { price: 600, name: '+20s freeze', cb: tower => tower.freezeduration += 20000 }  // 45s
+            , { price: 800, name: '+4dmg',       cb: tower => tower.damage += 4 } ], // 5dmg
+            [ { price: 200, name: '+1 range',      cb: tower => tower.radius += 1 }
+            , { price: 400, name: '+35% slowdown', cb: tower => tower.freezeslowdown *= 0.65 }
+            , { price: 600, name: '+45% slowdown', cb: tower => tower.freezeslowdown *= 0.75 }
+            , { price: 800, name: '+55% slowdown', cb: tower => tower.freezeslowdown *= 0.85 } ]
+        ];
+    }
+    for (let path=0; path < this.upgrades.length; path++) {
+        for (let upgradeidx=1; upgradeidx < this.upgrades[path].length; upgradeidx++) {
+            this.upgrades[path][upgradeidx].locked = true; // need to buy the earlier upgrade(s) first
+        }
+    }
+    this.cooldown = this.maxcooldown;
+};
+Tower.prototype.place = function(x, y) {
+    for (let tower of towers) {
+        if (tower.x == x && tower.y == y) {
+            return;
+        }
+    }
+    if (singletowermode && towers.length != 0) return;
+    if (!spendMoney(this.price)) return;
+    Tower.stats[this.type].towersbought++;
+    this.x = x;
+    this.y = y;
+    towers.push(this);
+    return this;
+};
+Tower.prototype.calculateUpgradePrice = function() {
+    let totalprice = 0;
+    for (let path=0; path < this.upgrades.length; path++) {
+        for (let upgradeidx=1; upgradeidx < this.upgrades[path].length; upgradeidx++) {
+            let upgrade = this.upgrades[path][upgradeidx];
+            if (upgrade.bought) {
+                totalprice += upgrade.price;
+            }
+        }
+    }
+    return totalprice;
+};
+Tower.prototype.shoot = function() {
+    let tower = this;
+    let cooldown = tower.cooldown;
+    let seenenemy = false;
+    for (let i=0; i < f2b.length; i++) {
+        let enemy = f2b[i];
+        if (rectIntersectsCircle(enemy.x*32+enemy.offx, enemy.y*32+enemy.offy, 32, 32, tower.x*32+16, tower.y*32+16, tower.radius*32)) {
+            seenenemy = true;
+            if (tower.cooldown <= 0 && (tower.minseentime == null || tower.seentime > tower.minseentime)) {
+                if (tower.type == 'burst') {
+                    Tower.stats[this.type].damage += Math.min(enemy.health, tower.damage);
+                    enemy.damage(tower.damage);
+                    if (enemy.died()) Tower.stats[this.type].kills++;
+                    cooldown = tower.cooldown = tower.maxcooldown;
+                    let laser = [{ x: tower.x*32+16, y: tower.y*32+16 }, { x: enemy.x*32+enemy.offx+16, y: enemy.y*32+enemy.offy+16 }];
+                    laser.time = 0;
+                    laser.maxtime = 500;
+                    laser.color = TowerColor(tower.type);
+                    lasers.push(laser);
+                } else if (tower.type == 'pulse') {
+                    Tower.stats[this.type].damage += Math.min(enemy.health, tower.damage);
+                    enemy.damage(tower.damage);
+                    if (enemy.died()) Tower.stats[this.type].kills++;
+                    cooldown += tower.perenemycooldown;
+                    let laser = [{ x: tower.x*32+16, y: tower.y*32+16 }, { x: enemy.x*32+enemy.offx+16, y: enemy.y*32+enemy.offy+16 }];
+                    laser.time = 0;
+                    laser.maxtime = 1000;
+                    laser.color = TowerColor(tower.type);
+                    lasers.push(laser);
+                } else if (tower.type == 'bolt') {
+                    let laser = [{ x: tower.x*32+16, y: tower.y*32+16 }];
+                    let totaldamage = 0;
+                    for (let j=i-1; j >= 0; j--) {
+                        let enemy = f2b[j];
+                        if (totaldamage >= tower.maxdamage) break;
+                        Tower.stats[this.type].damage += Math.min(enemy.health, tower.damage);
+                        enemy.damage(tower.damage);
+                        if (enemy.died()) Tower.stats[this.type].kills++;
+                        totaldamage += Math.min(enemy.health, tower.damage);
+                        laser.push({ x: enemy.x*32+enemy.offx+16, y: enemy.y*32+enemy.offy+16 });
+                    }
+                    for (let j=i; j < f2b.length; j++) {
+                        let enemy = f2b[j];
+                        if (totaldamage >= tower.maxdamage) break;
+                        Tower.stats[this.type].damage += Math.min(enemy.health, tower.damage);
+                        enemy.damage(tower.damage);
+                        if (enemy.died()) Tower.stats[this.type].kills++;
+                        totaldamage += Math.min(enemy.health, tower.damage);
+                        laser.push({ x: enemy.x*32+enemy.offx+16, y: enemy.y*32+enemy.offy+16 });
+                    }
+                    cooldown = tower.cooldown = tower.maxcooldown;
+                    laser.time = 0;
+                    laser.maxtime = 2500;
+                    laser.color = TowerColor(tower.type);
+                    lasers.push(laser);
+                } else if (tower.type == 'frost') {
+                    Tower.stats[this.type].damage += Math.min(enemy.health, tower.damage);
+                    enemy.damage(tower.damage);
+                    if (enemy.died()) Tower.stats[this.type].kills++;
+                    cooldown = tower.maxcooldown;
+                    let laser = [{ x: tower.x*32+16, y: tower.y*32+16 }, { x: enemy.x*32+enemy.offx+16, y: enemy.y*32+enemy.offy+16 }];
+                    laser.time = 0;
+                    laser.maxtime = 500;
+                    laser.color = TowerColor(tower.type);
+                    lasers.push(laser);
+                    enemy.giveEffect('freeze',
+                        { damage: tower.freezedamage
+                        , duration: tower.freezeduration
+                        , maxcooldown: tower.freezecooldown
+                        , slowdown: tower.freezeslowdown });
+                }
+            }
+        }
+    }
+    updateStats();
+    if (seenenemy) {
+        tower.seentime += app.dt * speed;
+    } else {
+        tower.seentime = 0;
+    }
+    cooldown = Math.min(cooldown, tower.maxcooldown);
+    tower.cooldown = cooldown;
+    tower.cooldown -= app.dt * speed;
+    if (tower.cooldown < 0) tower.cooldown = 0;
+};
+Tower.stats = {};
+Tower.types = ['burst', 'pulse', 'bolt', 'frost'];
+for (let type of Tower.types) {
+    Tower.stats[type] = { damage: 0, kills: 0, upgradecost: 0, towersbought: 0 };
+}
+for (let type of Tower.types) {
+    Tower[type] = new Tower(type);
+}
+function TowerColor(type) {
+    if (type == 'burst') return '#0000ff';
+    if (type == 'pulse') return '#00ff00';
+    if (type == 'bolt') return '#ffdd00'
+    if (type == 'frost') return '#00ddff';
+    return null;
+};
+
+function rectIntersectsCircle(x, y, w, h, cx, cy, radius) {
+    let p_rect_1 = { x: x, y: y };
+    let p_rect_2 = { x: x + w, y: y };
+    let p_rect_3 = { x: x + w, y: y + h };
+    let p_rect_4 = { x: x, y: y + h };
+    let points = [ p_rect_1, p_rect_2, p_rect_3, p_rect_4 ];
+
+    for (let p of points) {
+        if ((cx - p.x)**2 + (cy - p.y)**2 < radius**2) {
+            return true;
+        }
+    }
+    return false;
+};
+function getTowerIndexOf(x, y) {
+    for (let i=0; i < towers.length; i++) {
+        let tower = towers[i];
+        if (tower.x == x && tower.y == y) return i;
+    }
+    return -1;
+};
+
+let upgrademenu = document.createElement('div');
+upgrademenu.id = 'upgrademenu';
+upgrademenu.options = document.createElement('div');
+upgrademenu.options.id = 'options';
+upgrademenu.info = document.createElement('div');
+upgrademenu.info.id = 'info';
+upgrademenu.description = document.createElement('div');
+upgrademenu.description.id = 'description';
+upgrademenu.stats = document.createElement('div');
+upgrademenu.stats.id = 'stats';
+
+let hints = document.createElement('div');
+hints.id = 'hints';
+
+function updateStats() {
+    let tower = towers[0];
+    if (tower != null && mode == 'place' && seltype != tower.type) tower = new Tower(seltype);
+    if (tower == null && seltype != null) tower = new Tower(seltype);
+    if (tower != null) {
+        upgrademenu.stats.innerHTML
+            = 'damage: ' + Tower.stats[tower.type].damage + '<br>'
+            + 'kills: ' + Tower.stats[tower.type].kills + '<br>'
+            + 'towers bought: ' + Tower.stats[tower.type].towersbought + 'x$' + tower.price
+            + '=' + (Tower.stats[tower.type].towersbought * tower.price) + '<br>'
+            + 'upgrades bought: $' + Tower.stats[tower.type].upgradecost + '<br>'
+    }
+};
+function updateUpgradeMenu() {
+    emptyDOMNode(upgrademenu.options);
+    emptyDOMNode(upgrademenu.info);
+    emptyDOMNode(upgrademenu.description);
+    emptyDOMNode(upgrademenu.stats);
+    upgrademenu.options.appendChild(document.createElement('div'))
+    upgrademenu.options.appendChild(document.createElement('div'));
+    upgrademenu.options.appendChild(document.createElement('div'));
+    let tower = towers[0];
+    if (tower != null && mode == 'place' && seltype != tower.type) tower = new Tower(seltype);
+    if (tower == null && seltype != null) tower = new Tower(seltype);
+    if (tower != null) {
+        let button;
+
+        let titlename = tower.type[0].toUpperCase() + tower.type.substr(1);
+        let towerprice = 0;
+
+        function createOption(path, upgradeidx, tower) {
+            let upgrade = tower.upgrades[path][upgradeidx];
+            let button = document.createElement('button');
+            upgrade.button = button;
+            button.appendChild(document.createTextNode(upgrade.name));
+            button.appendChild(document.createElement('br'));
+            button.appendChild(document.createTextNode('$' + upgrade.price));
+            if (upgrade.bought) button.dataset.bought = true;
+            button.onclick = (e) => {
+                if (spendMoney(upgrade.price)) {
+                    Tower.stats[tower.type].upgradecost += upgrade.price;
+                    updateStats();
+                    upgrade.cb(tower);
+                    upgrade.bought = true;
+                    upgrade.button.dataset.bought = true;
+                    upgrade.button.disabled = true;
+                    let nextupgrade = tower.upgrades[path][upgradeidx+1];
+                    if (nextupgrade != null) {
+                        delete nextupgrade.locked;
+                        nextupgrade.button.removeAttribute('disabled');
+                    }
+                }
+            };
+            if (upgrade.bought || upgrade.locked || towers[0] == null || tower.type != towers[0].type) button.disabled = true;
+            upgrademenu.options.children[path].appendChild(button);
+        };
+
+        upgrademenu.info.appendChild(document.createTextNode(titlename + ' ($' + tower.price + ')'));
+        upgrademenu.description.appendChild(document.createTextNode(tower.description));
+        for (let path=0; path < tower.upgrades.length; path++) {
+            for (let upgradeidx=0; upgradeidx < tower.upgrades[path].length; upgradeidx++) {
+                createOption(path, upgradeidx, tower);
+            }
+        }
+    }
+    updateStats();
+};
+updateUpgradeMenu();
+function select(type) {
+    if (type == null) {
+        mode = 'select';
+    } else {
+        if (false && mode == 'place' && seltype == type) { // remove false to allow de-selecting by pressing 1-4
+            mode = 'select';
+        } else {
+            mode = 'place';
+            seltype = type;
+        }
+    }
+    updateUpgradeMenu();
+};
+
+function emptyDOMNode(parent) {
+    while (parent.lastChild) {
+        parent.removeChild(parent.lastChild);
+    }
+};
+
+app.onload = function() {
+    app.body.appendChild(upgrademenu);
+    app.body.appendChild(hints);
+};
+app.onresize = function() {
+    emptyDOMNode(upgrademenu);
+    upgrademenu.style.top = map.h*32 + 'px';
+    upgrademenu.style.width = (map.w*32 - 2) + 'px';
+    upgrademenu.style.height = (canvas.height - map.h * 32 - 2) + 'px';
+    let h1 = document.createElement('h1');
+    h1.appendChild(document.createTextNode('Upgrades'));
+    upgrademenu.appendChild(h1);
+    upgrademenu.appendChild(upgrademenu.info);
+    upgrademenu.appendChild(upgrademenu.description);
+    upgrademenu.appendChild(upgrademenu.options);
+    upgrademenu.appendChild(upgrademenu.stats);
+
+    emptyDOMNode(hints);
+    hints.style.left = map.w*32 + 'px';
+    hints.style.top = map.h*32 + 'px';
+    hints.style.width = (canvas.width - map.w*32 - 2) + 'px';
+    hints.style.height = (canvas.height - map.h * 32 - 2) + 'px';
+    h1 = document.createElement('h1');
+    h1.appendChild(document.createTextNode('How To Play'));
+    hints.appendChild(h1);
+    let hinttext = document.createElement('div');
+    hinttext.id = "hinttext";
+    hinttext.innerHTML
+    = '<h2>Controls</h2>'
+    + 'Press <kbd>1</kbd>-<kbd>4</kbd> to select tower type (<kbd>Esc</kbd> to deselect).<br><br>'
+    + '<kbd>LMB</kbd> to place tower, <kbd>RMB</kbd> to sell tower.<br><br>'
+    + 'Press <kbd>Space</kbd> to start next wave.<br><br>'
+    + 'Press <kbd>W</kbd> to pause, <kbd>E</kbd> to speed up, <kbd>Q</kbd> to slow down.<br><br>'
+    + 'Press <kbd>F5</kbd> to restart.<br><br>'
+    + '<h2>Rules</h2>'
+    + Math.round(sellbackpercentage * 100) + '% of tower cost back on sell<br><br>'
+    + Math.round(upgradesellbackpercentage * 100) + '% of upgrade cost back on sell<br><br>'
+    + '$' + killbonus + ' on kill<br><br>'
+    + 'Towers only shoot when enemies are within vision<br><br>'
+    + 'You have only one life<br><br>'
+    + 'Find the best towers and positions for every wave, and try to survive as long as possible<br><br>'
+    ;
+    hints.appendChild(hinttext);
+};
+app.onupdate = function(dt) {
+    cursor('default');
+    if (keys.pressed['KeyQ']) speed = Math.max(1, speed / 2);
+    if (keys.pressed['KeyE']) speed = Math.min(16, speed * 2);
+    if (keys.pressed['KeyW']) paused = !paused;
+    if (keys.pressed['Space']) wavedone = false;
+    if (keys.pressed['Escape']) {
+        select(null);
+    }
+    if (keys.pressed['Digit1']) {
+        select('burst');
+    }
+    if (keys.pressed['Digit2']) {
+        select('pulse');
+    }
+    if (keys.pressed['Digit3']) {
+        select('bolt');
+    }
+    if (keys.pressed['Digit4']) {
+        select('frost');
+    }
+    selx = Math.floor(mouse.x / 32);
+    sely = Math.floor(mouse.y / 32);
+    if (selx >= map.w || sely >= map.h) selx = sely = null;
+    if (selx != null && sely != null && map[sely][selx] != '.') selx = sely = null;
+    if (mode == 'place' && (mouse.buttons.pressed & 0x1) && selx != null && sely != null) {
+        let newtower = new Tower(seltype, selx, sely);
+        if (newtower.place(selx, sely) == null) {
+            batchedtexts.push({
+                x: mouse.x,
+                y: mouse.y,
+                text: (money < newtower.price) ? 'Not enough funds!' : 'You can only place one tower!',
+                time: 0,
+                maxtime: 1000 });
+        }
+        updateUpgradeMenu();
+    }
+    if ((mouse.buttons.pressed & 0x4) && selx != null && sely != null) {
+        let i = getTowerIndexOf(selx, sely);
+        if (i != -1) {
+            let tower = towers[i];
+            addMoney(tower.price * sellbackpercentage + tower.calculateUpgradePrice() * upgradesellbackpercentage);
+            towers.splice(i, 1);
+        }
+        updateUpgradeMenu();
+    }
+    if (!paused && !gameover) {
+        for (let tower of towers) {
+            f2b = Array.from(enemies).sort((a, b) => b.distance() - a.distance()); // sorted from front to back
+            tower.shoot();
+        }
+        for (let i=0; i < enemies.length; i++) {
+            let enemy = enemies[i];
+            if (enemy.died()) {
+                enemy.die();
+                enemies.splice(i--, 1);
+            }
+        }
+        if (!wavedone) {
+            let wave = waves[wavenum];
+            if (wave != null) {
+                let unit = wave[0];
+                unit.elapsed += dt * speed;
+                if (unit.elapsed > unit.delay) {
+                    if (unit.enemytype != null) enemies.push(new Enemy(unit.enemytype));
+                    lastUnit = app.currentTime;
+                    if (unit.times == null || unit.times == 1) wave.shift();
+                    else {
+                        unit.times--;
+                        unit.elapsed = 0;
+                    }
+                }
+                if (wave.length == 0) {
+                    wavenum++;
+                    wavedone = true;
+                }
+            }
+        }
+        for (let i=0; i < Math.ceil(speed); i++) {
+            for (let enemy of enemies) {
+                let xspeed = speed % 1.0; // fraction of speed
+                if (xspeed == 0) xspeed = 1;
+                if (map[enemy.y][enemy.x] == 'v') enemy.offy += enemy.speed() * xspeed;
+                if (map[enemy.y][enemy.x] == '^') enemy.offy -= enemy.speed() * xspeed;
+                if (map[enemy.y][enemy.x] == '>') enemy.offx += enemy.speed() * xspeed;
+                if (map[enemy.y][enemy.x] == '<') enemy.offx -= enemy.speed() * xspeed;
+                while (enemy.offy >=  32) { enemy.y++; enemy.offy = 0; }
+                while (enemy.offy <= -32) { enemy.y--; enemy.offy = 0; }
+                while (enemy.offx >=  32) { enemy.x++; enemy.offx = 0; }
+                while (enemy.offx <= -32) { enemy.x--; enemy.offx = 0; }
+                if (enemy.x < 0 || enemy.x >= map.w || enemy.y < 0 || enemy.y >= map.h) {
+                    alert('Game Over!');
+                    gameover = true;
+                    break;
+                }
+                for (let i=0; i < enemy.effects.length; i++) {
+                    let effect = enemy.effects[i];
+                    effect.time += dt * xspeed;
+                    if (effect.type == 'freeze') {
+                        effect.damagetime += dt * xspeed;
+                        while (effect.damagetime >= effect.maxdamagetime) {
+                            enemy.damage(effect.damage);
+                            effect.damagetime -= effect.maxdamagetime;
+                        }
+                    }
+                    if (effect.time >= effect.maxtime) {
+                        enemy.effects.splice(i--, 1);
+                    }
+                }
+            }
+            if (gameover) break;
+        }
+        for (let i=0; i < lasers.length; i++) {
+            let laser = lasers[i];
+            laser.time += dt * speed;
+            if (laser.time >= laser.maxtime) {
+                lasers.splice(i--, 1);
+            }
+        }
+        for (let i=0; i < batchedtexts.length; i++) {
+            let text = batchedtexts[i];
+            text.time += dt * speed;
+            if (text.time >= text.maxtime) {
+                batchedtexts.splice(i--, 1);
+            }
+        }
+    }
+};
+app.onredraw = function(frame) {
+    canvas.style.background = '#000000';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 1;
+    for (let x=0; x < map.w; x++) {
+        for (let y=0; y < map.h; y++) {
+            ctx.fillStyle = map[y][x] == '.' ? '#333' : '#111';
+            ctx.fillRect(x*32, y*32, 32, 32);
+        }
+    }
+    for (let tower of towers) {
+        ctx.strokeStyle = rgba(50, 50, 50, 0.5);
+        ctx.fillStyle = rgba(50, 50, 50, 0.05);
+        ctx.beginPath();
+        ctx.arc(tower.x*32 + 16, tower.y*32 + 16, tower.radius*32, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+    }
+    for (let tower of towers) {
+        let color = TowerColor(tower.type);
+        let [ r, g, b ] = unpackRGB(color);
+        ctx.fillStyle = rgba(r, g, b, 0.5);
+        ctx.strokeStyle = color;
+        let perc = ((tower.maxcooldown - tower.cooldown) / tower.maxcooldown);
+        if (tower.maxcooldown == 0) perc = 1.0;
+        ctx.fillRect(tower.x*32, tower.y*32 + 32 - perc*32, 32, perc*32);
+
+        ctx.beginPath();
+        ctx.moveTo(tower.x*32+ 0, tower.y*32+ 0);
+        ctx.lineTo(tower.x*32+32, tower.y*32+ 0);
+        ctx.lineTo(tower.x*32+32, tower.y*32+32);
+        ctx.lineTo(tower.x*32+ 0, tower.y*32+32);
+        ctx.lineTo(tower.x*32+ 0, tower.y*32+ 0);
+        ctx.stroke();
+        ctx.strokeRect(tower.x*32, tower.y*32, 32, 32);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px "Trebuchet MS", Helvetica, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.floor(perc * 100) + '%', tower.x*32+16, tower.y*32+16);
+    }
+    for (let laser of lasers) {
+        ctx.lineWidth = 4;
+        let [ r, g, b ] = unpackRGB(laser.color);
+        ctx.strokeStyle = rgba(r, g, b, (laser.maxtime - laser.time) / laser.maxtime);
+        ctx.beginPath();
+        ctx.moveTo(laser[0].x, laser[0].y);
+        for (let i=1; i < laser.length; i++) {
+            ctx.lineTo(laser[i].x, laser[i].y);
+        }
+        ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    if (mode == 'place' && selx != null && sely != null) {
+        let [r, g, b] = unpackRGB(TowerColor(seltype));
+        ctx.fillStyle = rgba(r, g, b, 0.25);
+        ctx.fillRect(selx*32, sely*32, 32, 32);
+
+        ctx.strokeStyle = rgba(50, 50, 50, 0.25);
+        ctx.fillStyle = rgba(50, 50, 50, 0.05);
+        ctx.beginPath();
+        ctx.arc(selx*32 + 16, sely*32 + 16, Tower[seltype].radius*32, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,1.0)';
+    for (let x=0; x <= map.w; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x*32+0.5, 0);
+        ctx.lineTo(x*32+0.5, map.h*32);
+        ctx.stroke();
+    }
+    for (let y=0; y <= map.h; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y*32+0.5);
+        ctx.lineTo(map.w*32, y*32+0.5);
+        ctx.stroke();
+    }
+    ctx.lineWidth = 2;
+    for (let enemy of enemies) {
+        let perc = (enemy.health / enemy.maxhealth);
+        let x = enemy.x*32 + enemy.offx;
+        let y = enemy.y*32 + enemy.offy;
+        let [ r, g, b ] = unpackRGB(EnemyColor(enemy.type));
+        ctx.fillStyle = rgba(r, g, b, 0.5);
+        ctx.fillRect(x, y + 32 - perc * 32, 32, perc * 32);
+
+        ctx.strokeStyle = EnemyColor(enemy.type);
+        ctx.beginPath();
+        ctx.moveTo(x+ 0, y+ 0);
+        ctx.lineTo(x+32, y+ 0);
+        ctx.lineTo(x+32, y+32);
+        ctx.lineTo(x+ 0, y+32);
+        ctx.lineTo(x+ 0, y+ 0);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px "Trebuchet MS", Helvetica, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(enemy.health, x+16, y+10);
+        ctx.fillText(enemy.maxhealth, x+16, y+(32-8));
+
+        for (let i=0; i < enemy.effects.length; i++) {
+            let effect = enemy.effects[i];
+            if (effect.color != null) {
+                let [ r, g, b ] = unpackRGB(effect.color);
+                let perc = (effect.maxtime - effect.time) / effect.maxtime;
+                ctx.fillStyle = rgba(r, g, b, 0.25);
+                ctx.fillRect(x, y+i*8, perc * 32, 8);
+            }
+        }
+    }
+    ctx.lineWidth = 1;
+    for (let text of batchedtexts) {
+        let perc = text.time / text.maxtime;
+        ctx.fillStyle = rgba(255, 255, 255, 1 - perc);
+        ctx.font = '12px "Trebuchet MS", Helvetica, sans-serif';
+        ctx.textAlign = "start";
+        ctx.textBaseline = "top";
+        ctx.fillText(text.text, text.x, text.y - 10 * perc);
+    }
+    let y = 0;
+    for (let i=wavenum; i < waves.length; i++) {
+        let wave = waves[i];
+        for (let j=0; j < wave.length; j++) {
+            let unit = wave[j];
+            if (unit.enemytype != null) ctx.fillStyle = EnemyColor(unit.enemytype);
+            else ctx.fillStyle = rgba(255, 255, 255, 0.25);
+            let x = map.w*32;
+            let size = 512*(unit.delay / 1000);
+            if (j == 0) ctx.fillRect(x, y, size*(1 - unit.elapsed / unit.delay), 16);
+            else ctx.fillRect(x, y, size, 16);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(x+ 0,   y+ 0);
+            ctx.lineTo(x+size, y+ 0);
+            ctx.lineTo(x+size, y+16);
+            ctx.lineTo(x+ 0,   y+16);
+            ctx.lineTo(x+ 0,   y+ 0);
+            ctx.stroke();
+
+            if (unit.times != null) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '16px "Trebuchet MS", Helvetica, sans-serif';
+                ctx.textAlign = "start";
+                ctx.textBaseline = "top";
+                ctx.fillText(' x' + unit.times, x+size, y);
+            }
+
+            y += 16;
+        }
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(map.w*32,    y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '24px "Trebuchet MS", Helvetica, sans-serif';
+    ctx.textAlign = "start";
+    ctx.textBaseline = "top";
+    ctx.fillText('$' + money, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '24px "Trebuchet MS", Helvetica, sans-serif';
+    ctx.textAlign = "start";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(speed + 'x', 4, canvas.height - 4);
+    ctx.font = '21px "Trebuchet MS", Helvetica, sans-serif';
+    ctx.textAlign = "end";
+    ctx.textBaseline = "bottom";
+    ctx.fillText((wavenum+1) + '/' + waves.length, 32*map.w - 4, 32*map.h - 4);
+};
+app.load();
+</script>
+</head>
+<body>
+</body>
+</html>
